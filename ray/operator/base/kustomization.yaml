@@ -29,4 +29,4 @@ resources:
 - ../rbac
 - ../manager
 - ../prometheus
-- ../scc
+#- ../scc
