@@ -1,13 +1,18 @@
-module github.com/opendatahub-io/distributed-workloads/tests/new-tests
+module github.com/opendatahub-io/distributed-workloads/tests
+
+go 1.19
 
 require (
 	github.com/onsi/gomega v1.27.10
 	github.com/openshift/api v0.0.0-20230718161610-2a3e8b481cec
-	github.com/project-codeflare/codeflare-operator v0.2.2
-	github.com/ray-project/kuberay/ray-operator v0.0.0-20230830082034-e7fbf7d73576
+	github.com/project-codeflare/codeflare-operator v1.0.0-rc.1
+	github.com/project-codeflare/multi-cluster-app-dispatcher v1.35.0
+	github.com/ray-project/kuberay/ray-operator v0.0.0-20230920050528-dfdc51a88b6d
 	k8s.io/api v0.27.2
 	k8s.io/apimachinery v0.27.2
 )
+
+replace sigs.k8s.io/custom-metrics-apiserver => sigs.k8s.io/custom-metrics-apiserver v1.25.1-0.20230306170449-63d8c93851f3
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -30,7 +35,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/openshift/client-go v0.0.0-20230718165156-6014fb98e86a // indirect
-	github.com/project-codeflare/multi-cluster-app-dispatcher v1.34.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	golang.org/x/net v0.12.0 // indirect
@@ -53,5 +57,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
-go 1.19

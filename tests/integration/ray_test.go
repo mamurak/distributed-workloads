@@ -18,6 +18,7 @@ package integration
 
 import (
 	"encoding/base64"
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -36,6 +37,10 @@ import (
 func TestRayCluster(t *testing.T) {
 	test := support.With(t)
 	test.T().Parallel()
+
+	// This test is unstable. It seems that RayJob CR sometimes trigger 2 jobs in Ray, causing confusion in KubeRay operator.
+	// Needs to be checked with newer KubeRay version. If still unstable then it needs to be reported.
+	test.T().Skip("Requires https://github.com/opendatahub-io/distributed-workloads/issues/65")
 
 	// Create a namespace
 	namespace := test.NewTestNamespace()
@@ -167,6 +172,12 @@ func TestRayJobSubmissionRest(t *testing.T) {
 	dashboard, err := test.Client().Route().RouteV1().Routes(namespace.Name).Get(test.Ctx(), dashboardRoute.Name, metav1.GetOptions{})
 	test.Expect(err).NotTo(HaveOccurred())
 	dashboardHostname := dashboard.Status.Ingress[0].Host
+
+	// Wait for 200 reply from dashboard route
+	test.Eventually(func() int {
+		resp, _ := http.Get("http://" + dashboardHostname)
+		return resp.StatusCode
+	}, support.TestTimeoutLong).Should(Equal(200))
 
 	rayClient := support.NewRayClusterClient(url.URL{Scheme: "http", Host: dashboardHostname})
 

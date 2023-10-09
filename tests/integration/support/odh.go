@@ -14,27 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package integration
+package support
 
 import (
-	"testing"
-
-	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega"
 	cfosupport "github.com/project-codeflare/codeflare-operator/test/support"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/opendatahub-io/distributed-workloads/tests/integration/support"
 )
 
-func TestKubeRayRunning(t *testing.T) {
-	test := cfosupport.With(t)
+func GetODHCodeFlareImageStreamTag(test cfosupport.Test) string {
+	test.T().Helper()
 
-	kuberay, err := test.Client().Core().AppsV1().Deployments(support.GetOpenDataHubNamespace()).Get(test.Ctx(), "kuberay-operator", metav1.GetOptions{})
-	test.Expect(err).NotTo(HaveOccurred())
-
-	// Assert the KubeRay Deployment is running
-	test.Expect(kuberay).To(WithTransform(cfosupport.ConditionStatus(appsv1.DeploymentAvailable), Equal(corev1.ConditionTrue)))
+	cfis, err := test.Client().Image().ImageV1().ImageStreams(GetOpenDataHubNamespace()).Get(test.Ctx(), "codeflare-notebook", metav1.GetOptions{})
+	test.Expect(err).NotTo(gomega.HaveOccurred())
+	test.Expect(cfis.Spec.Tags).To(gomega.HaveLen(1))
+	return cfis.Spec.Tags[0].Name
 }

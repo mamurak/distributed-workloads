@@ -1,5 +1,5 @@
 # This template maybe used to spin up a custom notebook image
-# i.e.: sed s/%INGRESS%/$(oc get ingresses.config/cluster -o jsonpath={.spec.domain})/g tests/resources/custom-nb.template | oc apply -f -
+# i.e.: sed s/{{ .IngressDomain}}/$(oc get ingresses.config/cluster -o jsonpath={.spec.domain})/g tests/resources/custom-nb.template | oc apply -f -
 # resources generated:
 # pod/jupyter-nb-kube-3aadmin-0
 # service/jupyter-nb-kube-3aadmin
@@ -10,10 +10,10 @@ kind: Notebook
 metadata:
   annotations:
     notebooks.opendatahub.io/inject-oauth: "true"
-    notebooks.opendatahub.io/last-image-selection: codeflare-notebook:v0.7.1
+    notebooks.opendatahub.io/last-image-selection: codeflare-notebook:latest
     notebooks.opendatahub.io/last-size-selection: Small
-    notebooks.opendatahub.io/oauth-logout-url: https://odh-dashboard-%NAMESPACE%.%INGRESS%/notebookController/kube-3aadmin/home
-    opendatahub.io/link: https://jupyter-nb-kube-3aadmin-%NAMESPACE%.%INGRESS%/notebook/%NAMESPACE%/jupyter-nb-kube-3aadmin
+    notebooks.opendatahub.io/oauth-logout-url: https://odh-dashboard-{{ .OpenDataHubNamespace}}.{{ .IngressDomain}}/notebookController/kube-3aadmin/home
+    opendatahub.io/link: https://jupyter-nb-kube-3aadmin-{{ .Namespace}}.{{ .IngressDomain}}/notebook/{{ .Namespace}}/jupyter-nb-kube-3aadmin
     opendatahub.io/username: kube:admin
   generation: 1
   labels:
@@ -22,7 +22,7 @@ metadata:
     opendatahub.io/odh-managed: "true"
     opendatahub.io/user: kube-3aadmin
   name: jupyter-nb-kube-3aadmin
-  namespace: %NAMESPACE%
+  namespace: {{ .Namespace}}
 spec:
   template:
     spec:
@@ -43,25 +43,25 @@ spec:
             --ServerApp.port=8888
                               --ServerApp.token=''
                               --ServerApp.password=''
-                              --ServerApp.base_url=/notebook/%NAMESPACE%/jupyter-nb-kube-3aadmin
+                              --ServerApp.base_url=/notebook/{{ .Namespace}}/jupyter-nb-kube-3aadmin
                               --ServerApp.quit_button=False
-                              --ServerApp.tornado_settings={"user":"kube-3aadmin","hub_host":"https://odh-dashboard-%NAMESPACE%.%INGRESS%","hub_prefix":"/notebookController/kube-3aadmin"}
+                              --ServerApp.tornado_settings={"user":"kube-3aadmin","hub_host":"https://odh-dashboard-{{ .OpenDataHubNamespace}}.{{ .IngressDomain}}","hub_prefix":"/notebookController/kube-3aadmin"}
         - name: JUPYTER_IMAGE
-          value: image-registry.openshift-image-registry.svc:5000/%NAMESPACE%/codeflare-notebook:v0.7.1
+          value: image-registry.openshift-image-registry.svc:5000/{{ .OpenDataHubNamespace}}/codeflare-notebook:{{ .CodeFlareImageStreamTag}}
         - name: JUPYTER_NOTEBOOK_PORT
           value: "8888"
         - name: OCP_SERVER
-          value: https://%OCPSERVER%
+          value: {{ .OpenShiftApiUrl}}
         - name: OCP_TOKEN
-          value: %OCPTOKEN%
-        image: image-registry.openshift-image-registry.svc:5000/%NAMESPACE%/codeflare-notebook:v0.7.1
-        command: ["/bin/sh", "-c", "pip install papermill && oc login --token=${OCP_TOKEN} --server=${OCP_SERVER} --insecure-skip-tls-verify=true && papermill /opt/app-root/notebooks-%JOBTYPE%/mnist_%JOBTYPE%_mini.ipynb /opt/app-root/src/mcad-out.ipynb && sleep infinity"]
+          value: {{ .KubernetesBearerToken}}
+        image: image-registry.openshift-image-registry.svc:5000/{{ .OpenDataHubNamespace}}/codeflare-notebook:{{ .CodeFlareImageStreamTag}}
+        command: ["/bin/sh", "-c", "pip install papermill && oc login --token=${OCP_TOKEN} --server=${OCP_SERVER} --insecure-skip-tls-verify=true && papermill /opt/app-root/notebooks/{{ .NotebookConfigMapFileName}} /opt/app-root/src/mcad-out.ipynb -p namespace {{ .Namespace}} && sleep infinity"]
         # args: ["pip install papermill && oc login --token=${OCP_TOKEN} --server=${OCP_SERVER} --insecure-skip-tls-verify=true && papermill /opt/app-root/notebooks/mcad.ipynb /opt/app-root/src/mcad-out.ipynb" ]
         imagePullPolicy: Always
         # livenessProbe:
         #   failureThreshold: 3
         #   httpGet:
-        #     path: /notebook/%NAMESPACE%/jupyter-nb-kube-3aadmin/api
+        #     path: /notebook/{{ .Namespace}}/jupyter-nb-kube-3aadmin/api
         #     port: notebook-port
         #     scheme: HTTP
         #   initialDelaySeconds: 10
@@ -83,8 +83,8 @@ spec:
         volumeMounts:
         - mountPath: /opt/app-root/src
           name: jupyterhub-nb-kube-3aadmin-pvc
-        - mountPath: /opt/app-root/notebooks-%JOBTYPE%
-          name: notebooks-%JOBTYPE%
+        - mountPath: /opt/app-root/notebooks
+          name: {{ .NotebookConfigMapName}}
         workingDir: /opt/app-root/src
       - args:
         - --provider=openshift
@@ -101,7 +101,7 @@ spec:
         - --email-domain=*
         - --skip-provider-button
         - --openshift-sar={"verb":"get","resource":"notebooks","resourceAPIGroup":"kubeflow.org","resourceName":"jupyter-nb-kube-3aadmin","namespace":"$(NAMESPACE)"}
-        - --logout-url=https://odh-dashboard-%NAMESPACE%.%INGRESS%/notebookController/kube-3aadmin/home
+        - --logout-url=https://odh-dashboard-{{ .OpenDataHubNamespace}}.{{ .IngressDomain}}/notebookController/kube-3aadmin/home
         env:
         - name: NAMESPACE
           valueFrom:
@@ -151,7 +151,7 @@ spec:
       volumes:
       - name: jupyterhub-nb-kube-3aadmin-pvc
         persistentVolumeClaim:
-          claimName: jupyterhub-nb-kube-3aadmin-pvc
+          claimName: {{ .NotebookPVC}}
       - name: oauth-config
         secret:
           defaultMode: 420
@@ -160,18 +160,6 @@ spec:
         secret:
           defaultMode: 420
           secretName: jupyter-nb-kube-3aadmin-tls
-      - name: notebooks-%JOBTYPE%
+      - name: {{ .NotebookConfigMapName}}
         configMap:
-          name: notebooks-%JOBTYPE%
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
- name: jupyterhub-nb-kube-3aadmin-pvc
- namespace: %NAMESPACE%
-spec:
- accessModes:
-   - ReadWriteOnce
- resources:
-   requests:
-     storage: 10Gi
+          name: {{ .NotebookConfigMapName}}

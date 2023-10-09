@@ -6,6 +6,7 @@ CMD_DIR=./cmd/
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
+TMPDIR ?= /tmp
 
 ## Tool Binaries
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
@@ -25,8 +26,8 @@ help: ## Display this help.
 .PHONY: all-in-one # All-In-One
 all-in-one: ## Install distributed AI platform  
 	@echo -e "\n==> Installing Everything needed for distributed AI platform on OpenShift cluster \n"
-	-make delete-codeflare delete-ndf-operator delete-nvidia-operator delete-codeflare-operator delete-opendatahub-operator
-	make install-opendatahub-operator install-codeflare-operator install-ndf-operator install-nvidia-operator deploy-codeflare
+	-make delete-codeflare delete-nfd-operator delete-nvidia-operator delete-codeflare-operator delete-opendatahub-operator
+	make install-opendatahub-operator install-codeflare-operator install-nfd-operator install-nvidia-operator deploy-codeflare
 	make opendatahub-dashboard
 	@echo -e "\n==> Done (Deploy everything)\n" 
 
@@ -67,49 +68,65 @@ delete-codeflare-operator: ## Delete CodeFlare operator
 	-export CLUSTER_SERVICE_VERSION=`oc get clusterserviceversion -n openshift-operators -l operators.coreos.com/codeflare-operator.openshift-operators -o custom-columns=:metadata.name`; \
 	oc delete clusterserviceversion $$CLUSTER_SERVICE_VERSION -n openshift-operators
 
+.PHONY: install-codeflare-operator-from-github
+install-codeflare-operator-from-github: ## Install CodeFlare operator from main branch on GitHub
+	@echo -e "\n==> Installing CodeFlare Operator from main branch on GitHub \n"
+	test -d $(TMPDIR)/codeflare || git clone https://github.com/project-codeflare/codeflare-operator.git $(TMPDIR)/codeflare
+	VERSION=dev make deploy -C $(TMPDIR)/codeflare
+
+.PHONY: delete-codeflare-operator-from-github
+delete-codeflare-operator-from-github: ## Delete CodeFlare operator from main branch on GitHub
+	@echo -e "\n==> Deleting CodeFlare Operator from main branch on GitHub \n"
+	test -d $(TMPDIR)/codeflare || git clone https://github.com/project-codeflare/codeflare-operator.git $(TMPDIR)/codeflare
+	make undeploy -C $(TMPDIR)/codeflare
+
 ##@ CodeFlare
 
 .PHONY: deploy-codeflare
 deploy-codeflare: ## Deploy CodeFlare
 	@echo -e "\n==> Deploying CodeFlare \n"
 	-oc create ns opendatahub
-	@while [[ -z $$(oc get customresourcedefinition kfdefs.kfdef.apps.kubeflow.org) ]]; do echo "."; sleep 10; done
-	oc apply -f https://raw.githubusercontent.com/opendatahub-io/odh-manifests/master/kfdef/odh-core.yaml -n opendatahub
-	oc apply -f https://raw.githubusercontent.com/opendatahub-io/distributed-workloads/main/codeflare-stack-kfdef.yaml -n opendatahub
+	@while [[ -z $$(oc get customresourcedefinition datascienceclusters.datasciencecluster.opendatahub.io) ]]; do echo "."; sleep 10; done
+	oc apply -f https://raw.githubusercontent.com/opendatahub-io/distributed-workloads/main/codeflare-dsc.yaml -n opendatahub
 
 .PHONY: delete-codeflare
 delete-codeflare: ## Delete CodeFlare
-	@echo -e "\n==> Deleteing CodeFlare \n"
-	-oc delete -f https://raw.githubusercontent.com/opendatahub-io/odh-manifests/master/kfdef/odh-core.yaml -n opendatahub
-	-oc delete -f https://raw.githubusercontent.com/opendatahub-io/distributed-workloads/main/codeflare-stack-kfdef.yaml -n opendatahub
+	@echo -e "\n==> Deleting CodeFlare \n"
+	-oc delete -f https://raw.githubusercontent.com/opendatahub-io/distributed-workloads/main/codeflare-dsc.yaml -n opendatahub
 	-oc delete ns opendatahub
 
 .PHONY: deploy-codeflare-from-filesystem
 deploy-codeflare-from-filesystem: kustomize ## Deploy CodeFlare from local file system
 	@echo -e "\n==> Deploying CodeFlare \n"
 	-oc create ns opendatahub
-	@while [[ -z $$(oc get customresourcedefinition mcads.codeflare.codeflare.dev) ]]; do echo "."; sleep 10; done
 	$(KUSTOMIZE) build ray/operator/base | oc apply --server-side=true -n opendatahub -f -
 	$(KUSTOMIZE) build codeflare-stack/base | oc apply --server-side=true -n opendatahub -f -
 
 .PHONY: delete-codeflare-from-filesystem
 delete-codeflare-from-filesystem: kustomize ## Delete CodeFlare deployed from local file system
-	@echo -e "\n==> Deleteing CodeFlare \n"
+	@echo -e "\n==> Deleting CodeFlare \n"
 	-$(KUSTOMIZE) build ray/operator/base | oc delete -n opendatahub -f -
 	-$(KUSTOMIZE) build codeflare-stack/base | oc delete -n opendatahub -f -
 	-oc delete ns opendatahub
 
 ##@ GPU Support
 
-.PHONY: install-ndf-operator
-install-ndf-operator: ## Install NDF operator ( Node Feature Discovery )
-	@echo -e "\n==> Installing NDF Operator \n"
+.PHONY: install-nfd-operator
+install-nfd-operator: ## Install NFD operator ( Node Feature Discovery )
+	@echo -e "\n==> Installing NFD Operator \n"
 	-oc create ns openshift-nfd
-	oc create -f contrib/configuration/ndf-operator-subscription.yaml
+	oc create -f contrib/configuration/nfd-operator-subscription.yaml
+	@echo -e "\n==> Creating default NodeFeatureDiscovery CR \n"
+	@while [[ -z $$(oc get customresourcedefinition nodefeaturediscoveries.nfd.openshift.io) ]]; do echo "."; sleep 10; done
+	@while [[ -z $$(oc get csv -n openshift-nfd --selector operators.coreos.com/nfd.openshift-nfd) ]]; do echo "."; sleep 10; done
+	oc get csv -n openshift-nfd --selector operators.coreos.com/nfd.openshift-nfd -ojsonpath={.items[0].metadata.annotations.alm-examples} | jq '.[] | select(.kind=="NodeFeatureDiscovery")' | oc apply -f -
 
-.PHONY: delete-ndf-operator
-delete-ndf-operator: ## Delete NDF operator
-	@echo -e "\n==> Deleting NDF Operator \n"
+.PHONY: delete-nfd-operator
+delete-nfd-operator: ## Delete NFD operator
+	@echo -e "\n==> Deleting NodeFeatureDiscovery CR \n"
+	oc delete NodeFeatureDiscovery --all -n openshift-nfd
+	@while [[ -n $$(oc get NodeFeatureDiscovery -n openshift-nfd) ]]; do echo "."; sleep 10; done
+	@echo -e "\n==> Deleting NFD Operator \n"
 	-oc delete subscription nfd -n openshift-nfd
 	-export CLUSTER_SERVICE_VERSION=`oc get clusterserviceversion -n openshift-nfd -l operators.coreos.com/nfd.openshift-nfd -o custom-columns=:metadata.name`; \
 	oc delete clusterserviceversion $$CLUSTER_SERVICE_VERSION -n openshift-nfd
@@ -120,9 +137,16 @@ install-nvidia-operator: ## Install nvidia operator
 	@echo -e "\n==> Installing nvidia Operator \n"
 	-oc create ns nvidia-gpu-operator
 	oc create -f contrib/configuration/nvidia-operator-subscription.yaml
+	@echo -e "\n==> Creating default ClusterPolicy CR \n"
+	@while [[ -z $$(oc get customresourcedefinition clusterpolicies.nvidia.com) ]]; do echo "."; sleep 10; done
+	@while [[ -z $$(oc get csv -n nvidia-gpu-operator --selector operators.coreos.com/gpu-operator-certified.nvidia-gpu-operator) ]]; do echo "."; sleep 10; done
+	oc get csv -n nvidia-gpu-operator --selector operators.coreos.com/gpu-operator-certified.nvidia-gpu-operator -ojsonpath={.items[0].metadata.annotations.alm-examples} | jq .[] | oc apply -f -
 
 .PHONY: delete-nvidia-operator
 delete-nvidia-operator: ## Delete nvidia operator
+	@echo -e "\n==> Deleting ClusterPolicy CR \n"
+	oc delete ClusterPolicy --all -n nvidia-gpu-operator
+	@while [[ -n $$(oc get ClusterPolicy -n nvidia-gpu-operator) ]]; do echo "."; sleep 10; done
 	@echo -e "\n==> Deleting nvidia Operator \n"
 	-oc delete subscription gpu-operator-certified -n nvidia-gpu-operator
 	-export CLUSTER_SERVICE_VERSION=`oc get clusterserviceversion -n nvidia-gpu-operator -l operators.coreos.com/gpu-operator-certified.nvidia-gpu-operator -o custom-columns=:metadata.name`; \
